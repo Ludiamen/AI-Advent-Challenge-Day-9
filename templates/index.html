@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Агент ФСБУ 14/2022</title>
+  <style>
+    :root { --нма:#e2efda; --мал:#fff2cc; --расх:#ededed; --saas:#ddebf7; }
+    body { font-family: system-ui, sans-serif; max-width: 960px; margin: 32px auto; padding: 0 16px; color:#111827; }
+    h1 { margin-bottom: 4px; }
+    .idea { color:#6b7280; font-size:.88rem; margin-top:0; }
+    #чат { border:1px solid #e5e7eb; border-radius:8px; padding:12px; height:340px; overflow-y:auto; background:#fafafa; }
+    .msg { margin:8px 0; padding:10px 14px; border-radius:8px; white-space:pre-wrap; line-height:1.45; }
+    .от-пользователя { background:#dbeafe; margin-left:18%; }
+    .от-агента { background:#fff; border:1px solid #e5e7eb; margin-right:8%; }
+    .ошибка { background:#fde8e8; color:#9b1c1c; }
+    .системное { background:transparent; color:#6b7280; font-size:.85rem; text-align:center; }
+    .строка-ввода { display:flex; gap:8px; margin-top:12px; }
+    textarea { flex:1; padding:10px; font-size:1rem; font-family:inherit; border:1px solid #d1d5db; border-radius:8px; resize:vertical; }
+    button { padding:10px 18px; font-size:1rem; cursor:pointer; border:1px solid #d1d5db; border-radius:8px; background:#fff; }
+    button.главная { background:#2563eb; color:#fff; border-color:#2563eb; }
+    button:disabled { opacity:.5; cursor:default; }
+    #зона { border:2px dashed #cbd5e1; border-radius:8px; padding:18px; text-align:center; color:#6b7280; margin-top:12px; cursor:pointer; }
+    #зона.наведено { border-color:#2563eb; background:#eff6ff; color:#1d4ed8; }
+    table { border-collapse:collapse; width:100%; font-size:.86rem; margin-top:12px; }
+    th, td { border:1px solid #e5e7eb; padding:6px 8px; text-align:left; vertical-align:top; }
+    th { background:#f3f4f6; }
+    tr.НМА td:first-child { border-left:5px solid #3f8f4f; }
+    tr.малоценный_НМА td:first-child { border-left:5px solid #d6a419; }
+    tr.расходы_периода td:first-child { border-left:5px solid #9ca3af; }
+    tr.SaaS_подписка td:first-child { border-left:5px solid #3b82f6; }
+    .плитки { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
+    .плитка { flex:1 1 190px; border:1px solid #e5e7eb; border-radius:8px; padding:10px 14px; }
+    .плитка b { display:block; font-size:1.15rem; }
+    .полоса { height:6px; border-radius:3px; background:#e5e7eb; margin-top:6px; overflow:hidden; }
+    .полоса span { display:block; height:100%; }
+    details { margin-top:20px; border:1px solid #e5e7eb; border-radius:8px; padding:10px 14px; }
+    summary { cursor:pointer; font-weight:600; }
+    code { background:#f4f4f5; padding:1px 4px; border-radius:4px; }
+    .мета { color:#6b7280; font-size:.82rem; margin-top:8px; }
+    .панель { display:flex; gap:14px; align-items:flex-end; flex-wrap:wrap; margin-bottom:12px;
+              padding:10px 14px; border:1px solid #e5e7eb; border-radius:8px; background:#fafafa; }
+    .панель label { display:flex; flex-direction:column; font-size:.8rem; color:#374151; gap:3px; }
+    .панель select, .панель input { padding:6px 10px; font-size:.92rem; border:1px solid #d1d5db;
+                                    border-radius:6px; }
+    .счётчик { margin-left:auto; color:#6b7280; font-size:.82rem; }
+    .msg.восстановленное { opacity:.75; }
+    .токены { color:#6b7280; font-size:.78rem; margin:2px 0 10px 0; }
+    .от-агента + .токены { margin-right:8%; }
+    .шкала { height:5px; border-radius:3px; background:#e5e7eb; margin-top:6px; overflow:hidden; }
+    .шкала span { display:block; height:100%; background:#3b82f6; }
+    .шкала.тревога span { background:#dc2626; }
+    #рост, #выжимка { margin-top:16px; }
+    #выжимка .box { border-left:4px solid #8b5cf6; }
+    .сжатие { color:#6d28d9; font-size:.8rem; margin:2px 0 10px 0; }
+    #рост table { font-size:.84rem; }
+  </style>
+</head>
+<body>
+  <h1>Агент-аналитик ФСБУ 14/2022</h1>
+  <p class="idea">
+    Спросите про учёт нематериальных активов или загрузите договор, смету либо
+    спецификацию — агент найдёт ИТ-расходы, проверит пять критериев признания НМА
+    и разложит их по категориям. Модель: <code>{{ info.model }}</code>.
+  </p>
+
+  <div class="панель">
+    <label>Модель
+      <select id="модель">
+        {% for м in models %}
+          <option value="{{ м.key }}" {{ 'selected' if м.key == info.model_key }}
+                  {{ 'disabled' if not м.available }}>
+            {{ м.label }} · {{ м.provider }} · {{ 'бесплатно' if м.free else 'платно' }}
+            {{ '(нет ключа)' if not м.available }}
+          </option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Сессия
+      <input id="сессия" list="сессии" value="{{ info.session }}" placeholder="основная">
+      <datalist id="сессии"></datalist>
+    </label>
+    <span class="счётчик" id="счётчик">история загружается…</span>
+    <button id="расход" title="Показать, как рос расход токенов">Расход</button>
+    <button id="конспект" title="Показать выжимку давних реплик">Выжимка</button>
+    <button id="очистить" title="Стереть историю текущей сессии">Очистить историю</button>
+  </div>
+
+  <div id="чат">
+    <div class="msg системное">Задайте вопрос или перетащите сюда файл {{ info.supported_formats|join(', ') }}</div>
+  </div>
+
+  <div class="строка-ввода">
+    <textarea id="ввод" rows="2" placeholder="Например: годовая подписка на облачную CRM — это НМА?"></textarea>
+    <button id="отправить" class="главная">Спросить</button>
+  </div>
+
+  <div id="зона">
+    📄 Перетащите файл сюда или нажмите, чтобы выбрать
+    ({{ info.supported_formats|join(', ') }}, до 10 МБ)
+    <input type="file" id="файл" accept=".pdf,.docx,.xlsx" hidden>
+  </div>
+
+  <div id="рост" hidden></div>
+  <div id="выжимка" hidden></div>
+  <div id="результат"></div>
+
+  <details>
+    <summary>❓ Справка</summary>
+    <p><b>Что делает агент.</b> Читает документ, находит объекты ИТ-расходов и по каждому
+       проверяет пять критериев признания НМА из п. 4 ФСБУ 14/2022. Категорию, счёт учёта
+       и амортизацию считает код, а не языковая модель: там нужен воспроизводимый результат.
+       Модель отвечает только на пять вопросов «да/нет» и достаёт из документа суммы и сроки.</p>
+
+    <p><b>Память.</b> Каждая реплика сразу сохраняется в SQLite, поэтому разговор
+       переживает перезапуск сервера: откройте страницу заново — и он продолжится с того
+       же места. Сессия — это отдельная тема со своей историей; впишите новое имя в поле
+       «Сессия», чтобы начать чистый разговор, не стирая прежний. Разбор документа тоже
+       попадает в историю сжатой сводкой, поэтому после него можно спрашивать
+       «а почему третья позиция не НМА?».</p>
+
+    <p><b>Выбор модели.</b> История хранится как обычные пары «роль — текст» и от
+       провайдера не зависит, поэтому модель можно сменить посреди разговора —
+       контекст сохранится. Модели без ключа API в списке недоступны.</p>
+
+    <p><b>Сжатие истории.</b> Последние сообщения уходят в запрос дословно, а всё,
+       что старше, заменяется краткой выжимкой — несколько предложений вместо тысяч
+       токенов переписки. Выжимку делает отдельная дешёвая модель, а сырые сообщения
+       из базы не удаляются никогда: конспект всегда можно пересобрать заново, а
+       разговор — прочитать целиком. Кнопка «Выжимка» показывает текущий конспект и
+       позволяет сжать или пересобрать вручную.</p>
+
+    <p><b>Когда запускается.</b> По тому из двух условий, что наступит раньше:
+       накопилось достаточно состарившихся сообщений либо история заняла больше
+       половины доступного контекста. Второе важно потому, что один разбор договора
+       может занять больше места, чем десяток коротких реплик.</p>
+
+    <p><b>Чем расплачиваемся.</b> Выжимка накатывается — новая делается из прежней
+       плюс состарившихся реплик, поэтому детали от поколения к поколению
+       размываются. Пересборка из сырой истории это лечит.</p>
+
+    <p><b>Токены и деньги.</b> Перед каждым запросом агент оценивает, сколько токенов
+       займут системный промпт, история и сам вопрос, и сверяет это с контекстным окном
+       модели. Под ответом видно и оценку, и точный расход из ответа API, и стоимость.
+       Полоса показывает, насколько заполнен контекст; красной она становится, когда
+       занято больше 85%. Кнопка «Расход» открывает таблицу роста по ходу разговора.</p>
+
+    <p><b>Почему запрос дорожает.</b> Каждая новая реплика отправляется вместе со всей
+       прошлой перепиской, поэтому входная часть растёт от обмена к обмену, даже если
+       сами вопросы короткие. Это же и делает длинный диалог дороже короткого.</p>
+
+    <p><b>Токенизаторы у моделей разные.</b> Один и тот же русский текст обходится
+       <code>allam-2-7b</code> примерно втрое дороже, чем <code>gpt-oss</code>.
+       Измеренные коэффициенты лежат в <code>agent/catalog.py</code>, оценка их учитывает.</p>
+
+    <p><b>Категории:</b></p>
+    <table>
+      <tr><th>Категория</th><th>Счёт</th><th>Когда присваивается</th></tr>
+      <tr class="НМА"><td>НМА</td><td>04</td><td>Все пять критериев выполнены, стоимость выше лимита</td></tr>
+      <tr class="малоценный_НМА"><td>малоценный_НМА</td><td>забаланс</td><td>Все пять критериев выполнены, стоимость не выше лимита</td></tr>
+      <tr class="расходы_периода"><td>расходы_периода</td><td>26/44</td><td>Не выполнен хотя бы один критерий</td></tr>
+      <tr class="SaaS_подписка"><td>SaaS_подписка</td><td>26/44</td><td>Облачный сервис, контроль над объектом отсутствует</td></tr>
+    </table>
+
+    <p><b>Лимит стоимости</b> — {{ '{:,.0f}'.format(info.cost_limit).replace(',', ' ') }} ₽,
+       задаётся в <code>.env</code> переменной <code>COST_LIMIT</code>: организация
+       устанавливает его сама в учётной политике (п. 7 ФСБУ 14/2022).</p>
+
+    <p><b>Ограничения:</b> файл до 10 МБ; из документа берутся первые
+       {{ info.max_text_length }} символов; форматы —
+       {{ info.supported_formats|join(', ') }} (старый <code>.doc</code> не поддерживается).</p>
+
+    <p>То же самое в консоли: <code>python cli.py --файл договор.docx --отчёт out/свод.xlsx</code></p>
+  </details>
+
+<script>
+const чат = document.getElementById('чат');
+const ввод = document.getElementById('ввод');
+const кнопка = document.getElementById('отправить');
+const зона = document.getElementById('зона');
+const выбор = document.getElementById('файл');
+const результат = document.getElementById('результат');
+
+function добавить(текст, класс) {
+  const div = document.createElement('div');
+  div.className = 'msg ' + класс;
+  div.textContent = текст;
+  чат.appendChild(div);
+  чат.scrollTop = чат.scrollHeight;
+  return div;
+}
+
+function деньги(x) {
+  return (x || 0).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+
+async function спросить() {
+  const вопрос = ввод.value.trim();
+  if (!вопрос) return;
+  добавить(вопрос, 'от-пользователя');
+  ввод.value = '';
+  кнопка.disabled = true;
+  const ждём = добавить('Агент думает…', 'системное');
+  try {
+    const ответ = await fetch('/api/ask', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({question: вопрос, ...настройки()})
+    });
+    const данные = await ответ.json();
+    ждём.remove();
+    добавить(данные.error || данные.answer, данные.error ? 'ошибка' : 'от-агента');
+    if (данные.info) обновитьСчётчик(данные.info);
+    if (!данные.error) {
+      if (данные.compression && данные.compression.compressed) {
+        const c = данные.compression;
+        const div = document.createElement('div');
+        div.className = 'сжатие';
+        div.textContent = `✂ история сжата: ${c.compressed} сообщений, ` +
+          `${токеныСтрокой(c.tokens_before)} → ${токеныСтрокой(c.tokens_after)} токенов`;
+        чат.appendChild(div);
+      }
+      подписьРасхода(данные);
+      последнийРост = данные.growth || последнийРост;
+    }
+  } catch (e) {
+    ждём.remove();
+    добавить('Не удалось связаться с сервером: ' + e.message, 'ошибка');
+  } finally {
+    кнопка.disabled = false;
+  }
+}
+
+async function разобрать(файл) {
+  if (файл.size > 10 * 1024 * 1024) {
+    добавить('Файл больше 10 МБ — уменьшите его.', 'ошибка');
+    return;
+  }
+  добавить('📄 ' + файл.name, 'от-пользователя');
+  const ждём = добавить('Агент читает документ…', 'системное');
+  const форма = new FormData();
+  форма.append('file', файл);
+  форма.append('model', настройки().model);
+  форма.append('session', настройки().session);
+  try {
+    const ответ = await fetch('/api/analyze', {method: 'POST', body: форма});
+    const данные = await ответ.json();
+    ждём.remove();
+    if (данные.error) { добавить(данные.error, 'ошибка'); return; }
+    добавить('Готово: найдено объектов — ' + данные.summary.total_items +
+             '. Разбор добавлен в историю — можно задавать по нему вопросы.', 'от-агента');
+    if (данные.info) обновитьСчётчик(данные.info);
+    последнийРост = данные.growth || последнийРост;
+    показать(данные);
+  } catch (e) {
+    ждём.remove();
+    добавить('Не удалось разобрать документ: ' + e.message, 'ошибка');
+  }
+}
+
+function показать(данные) {
+  const всего = данные.summary.total_cost || 1;
+  const плитки = Object.entries(данные.summary.by_category).map(([имя, стр]) => {
+    const доля = (стр.amount / всего * 100).toFixed(1);
+    const цвет = {'НМА':'#3f8f4f','малоценный_НМА':'#d6a419','расходы_периода':'#9ca3af','SaaS_подписка':'#3b82f6'}[имя] || '#9ca3af';
+    return `<div class="плитка">${имя}<b>${деньги(стр.amount)} ₽</b>
+      <span style="color:#6b7280;font-size:.82rem">${стр.count} шт. · ${доля}%</span>
+      <div class="полоса"><span style="width:${доля}%;background:${цвет}"></span></div></div>`;
+  }).join('');
+
+  const строки = данные.items.map(п => {
+    const критерии = Object.entries(п.criteria)
+      .map(([имя, знач]) => (знач ? '✓ ' : '✗ ') + имя).join('\n');
+    const аморт = п.monthly_amortization
+      ? деньги(п.monthly_amortization) + ' ₽ × ' + п.spi_months + ' мес.'
+      : (п.amortization_note || '—');
+    return `<tr class="${п.category}">
+      <td><b>${п.position}</b><div style="color:#6b7280">${п.description || ''}</div></td>
+      <td>${деньги(п.cost)} ₽</td>
+      <td>${п.term_months || п.term_type}</td>
+      <td>${п.category}</td><td>${п.account}</td>
+      <td>${аморт}</td>
+      <td><details><summary>${Object.values(п.criteria).filter(Boolean).length} из 5</summary>
+          <pre style="margin:4px 0;font:inherit">${критерии}</pre></details></td>
+      <td>${п.risk_notes || ''}</td></tr>`;
+  }).join('');
+
+  результат.innerHTML = `
+    <h2>Классификация: ${данные.document_info.source_file}</h2>
+    <div class="плитки">${плитки}</div>
+    <table>
+      <tr><th>Объект</th><th>Стоимость</th><th>Срок</th><th>Категория</th><th>Счёт</th>
+          <th>Амортизация</th><th>Критерии</th><th>Риски</th></tr>
+      ${строки}
+    </table>
+    <p><button class="главная" onclick="location.href='/api/export/${данные.analysis_id}'">
+       ⬇ Экспорт в Excel</button></p>
+    <div class="мета">модель=${данные.meta.model} · время=${данные.meta.elapsed} с ·
+       токены: вход=${данные.meta.prompt_tokens}, выход=${данные.meta.completion_tokens}</div>`;
+  результат.scrollIntoView({behavior: 'smooth'});
+}
+
+const модель = document.getElementById('модель');
+const сессия = document.getElementById('сессия');
+const счётчик = document.getElementById('счётчик');
+const списокСессий = document.getElementById('сессии');
+const расход = document.getElementById('расход');
+const очистить = document.getElementById('очистить');
+const рост = document.getElementById('рост');
+const блокВыжимки = document.getElementById('выжимка');
+const конспект = document.getElementById('конспект');
+
+// Называть эту функцию «выбор» нельзя: так уже назван элемент <input type=file>
+// выше, а повторное объявление имени — синтаксическая ошибка, из-за которой
+// не выполняется весь скрипт целиком.
+function настройки() {
+  return {model: модель.value, session: сессия.value.trim() || 'основная'};
+}
+
+function токеныСтрокой(n) {
+  return (n || 0).toLocaleString('ru-RU');
+}
+
+function деньгиСтрокой(x) {
+  if (!x) return 'бесплатно';
+  return x < 0.01 ? x.toFixed(6) + ' $' : x.toFixed(4) + ' $';
+}
+
+function обновитьСчётчик(info, usage) {
+  const с = (info && info.stats) || {};
+  счётчик.textContent = `сессия «${info.session}» · сообщений: ${с.messages || 0}` +
+    (с.documents ? ` · разборов: ${с.documents}` : '') +
+    ` · ${токеныСтрокой(с.tokens)} токенов · ${деньгиСтрокой(с.cost)}`;
+  if (usage) последнийРост = usage;
+}
+
+// Подпись под ответом: что оценили заранее и что израсходовали на самом деле.
+function подписьРасхода(данные) {
+  const б = данные.budget || {}, ф = данные.usage || {};
+  const div = document.createElement('div');
+  div.className = 'токены';
+  const доля = б.available ? Math.min(100, б.prompt / б.available * 100) : 0;
+  const ошибка = ф.estimate_error ? ` · оценка разошлась на ${(ф.estimate_error * 100).toFixed(0)}%` : '';
+  div.innerHTML =
+    `оценка запроса ${токеныСтрокой(б.prompt)} (промпт ${токеныСтрокой(б.system)} + ` +
+    `история ${токеныСтрокой(б.history)} + вопрос ${токеныСтрокой(б.question)} + ` +
+    `обёртка ${токеныСтрокой(б.overhead)}) · факт: вход ${токеныСтрокой(ф.prompt_tokens)}, ` +
+    `выход ${токеныСтрокой(ф.completion_tokens)} · ${деньгиСтрокой(ф.cost)}${ошибка}` +
+    `<div class="шкала${доля > 85 ? ' тревога' : ''}"><span style="width:${доля}%"></span></div>` +
+    `<span>контекст занят на ${доля.toFixed(1)}% из ${токеныСтрокой(б.available)} доступных токенов</span>`;
+  чат.appendChild(div);
+  чат.scrollTop = чат.scrollHeight;
+}
+
+let последнийРост = [];
+
+function показатьРост(шаги) {
+  последнийРост = шаги || [];
+  if (!последнийРост.length) {
+    рост.hidden = true;
+    return;
+  }
+  const строки = последнийРост.map(ш => {
+    const заОбмен = ш.prompt_tokens + ш.completion_tokens;
+    return `<tr><td>${ш.number}${ш.kind === 'document' ? ' 📄' : ''}</td>
+      <td>${токеныСтрокой(ш.prompt_tokens)}</td>
+      <td>${токеныСтрокой(ш.completion_tokens)}</td>
+      <td>${токеныСтрокой(заОбмен)}</td>
+      <td><b>${токеныСтрокой(ш.total_tokens)}</b></td>
+      <td>${деньгиСтрокой(ш.total_cost)}</td></tr>`;
+  }).join('');
+  const первый = последнийРост[0].prompt_tokens;
+  const последний = последнийРост[последнийРост.length - 1].prompt_tokens;
+  const вывод = первый
+    ? `<p class="idea">Запрос вырос с ${токеныСтрокой(первый)} до ${токеныСтрокой(последний)} токенов
+       (в ${(последний / первый).toFixed(1)} раза): каждая реплика тянет за собой всю прошлую переписку.</p>`
+    : '';
+  рост.innerHTML = `<h2>Расход по ходу диалога</h2>
+    <table><tr><th>Обмен</th><th>Вход</th><th>Выход</th><th>За обмен</th>
+    <th>Накоплено</th><th>Стоимость</th></tr>${строки}</table>${вывод}`;
+  рост.hidden = false;
+  рост.scrollIntoView({behavior: 'smooth'});
+}
+
+async function загрузитьСостояние() {
+  try {
+    const ответ = await fetch('/api/state');
+    const данные = await ответ.json();
+    чат.innerHTML = '';
+    if (данные.history.length) {
+      добавить('↑ Ниже — сохранённый разговор, восстановленный из истории', 'системное');
+      данные.history.forEach(з => {
+        const класс = (з.role === 'user' ? 'от-пользователя' : 'от-агента') + ' восстановленное';
+        добавить(з.content, класс);
+      });
+    } else {
+      добавить('Новая сессия. Задайте вопрос или перетащите файл.', 'системное');
+    }
+    обновитьСчётчик(данные.info);
+    последнийРост = данные.growth || [];
+    списокСессий.innerHTML = данные.sessions
+      .map(с => `<option value="${с.session}">`).join('');
+  } catch (e) {
+    добавить('Не удалось загрузить историю: ' + e.message, 'ошибка');
+  }
+}
+
+очистить.onclick = async () => {
+  if (!confirm('Стереть историю сессии «' + сессия.value + '»?')) return;
+  const ответ = await fetch('/api/history/clear', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(настройки())
+  });
+  const данные = await ответ.json();
+  чат.innerHTML = '';
+  добавить('История очищена: удалено сообщений — ' + (данные.removed || 0), 'системное');
+  обновитьСчётчик(данные.info);
+  последнийРост = [];
+  рост.hidden = true;
+};
+
+конспект.onclick = async () => {
+  if (!блокВыжимки.hidden) { блокВыжимки.hidden = true; return; }
+  const состояние = await (await fetch('/api/state')).json();
+  показатьВыжимку(состояние.summary, состояние.info);
+};
+
+function показатьВыжимку(в, info) {
+  if (!info.compress) {
+    блокВыжимки.innerHTML = '<h2>Выжимка</h2><p class="idea">Сжатие выключено: ' +
+      'история уходит в запрос целиком.</p>';
+  } else if (!в) {
+    блокВыжимки.innerHTML = `<h2>Выжимка</h2><p class="idea">Сжатия ещё не было.
+      Состарившихся сообщений ждёт сжатия: ${info.pending || 0}, порог —
+      ${info.compress_every}.</p>
+      <p><button onclick="сжать(false)">Сжать сейчас</button></p>`;
+  } else {
+    блокВыжимки.innerHTML = `<h2>Выжимка · поколение ${в.generation}</h2>
+      <p class="idea">Свёрнуто сообщений: ${в.messages} · модель ${в.model} ·
+      дословно последних: ${info.keep_last}</p>
+      <div class="box">${в.content.replace(/</g, '&lt;')}</div>
+      <p><button onclick="сжать(false)">Сжать ещё раз</button>
+         <button onclick="сжать(true)">Пересобрать начисто</button></p>
+      <p class="idea">Конспект накатывается, поэтому детали могут размываться.
+         Пересборка соберёт его заново из сырой истории — сообщения в базе
+         сохраняются всегда.</p>`;
+  }
+  блокВыжимки.hidden = false;
+  блокВыжимки.scrollIntoView({behavior: 'smooth'});
+}
+
+async function сжать(пересобрать) {
+  блокВыжимки.innerHTML = '<p class="idea">Идёт сжатие…</p>';
+  const ответ = await fetch('/api/compress', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({...настройки(), rebuild: пересобрать})
+  });
+  const данные = await ответ.json();
+  if (данные.error) {
+    блокВыжимки.innerHTML = `<div class="box ошибка">${данные.error}</div>`;
+    return;
+  }
+  const р = данные.result || {};
+  if (р.compressed) {
+    добавить(`Свёрнуто сообщений: ${р.compressed}, ` +
+      `${токеныСтрокой(р.tokens_before)} → ${токеныСтрокой(р.tokens_after)} токенов ` +
+      `(осталось ${Math.round(р.ratio * 100)}%)`, 'системное');
+  } else {
+    добавить('Сжатие не выполнено: ' + (р.reason || р.error || 'нечего сжимать'), 'системное');
+  }
+  обновитьСчётчик(данные.info);
+  показатьВыжимку(данные.summary, данные.info);
+}
+
+расход.onclick = () => {
+  if (!рост.hidden) { рост.hidden = true; return; }
+  показатьРост(последнийРост);
+  if (рост.hidden) добавить('Расход появится после первого обмена с моделью.', 'системное');
+};
+
+модель.onchange = () => добавить('Модель переключена: ' +
+  модель.options[модель.selectedIndex].text.trim() + '. Разговор сохранён.', 'системное');
+сессия.onchange = загрузитьСостояние;
+
+кнопка.onclick = спросить;
+ввод.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); спросить(); }
+});
+// Поле выбора файла лежит внутри зоны, и его программный клик всплывает
+// обратно сюда же. Без проверки источника события обработчик вызвал бы сам
+// себя: диалог выбора открывался бы дважды или уходил в рекурсию.
+зона.onclick = событие => { if (событие.target !== выбор) выбор.click(); };
+выбор.onchange = () => выбор.files[0] && разобрать(выбор.files[0]);
+['dragenter', 'dragover'].forEach(имя => зона.addEventListener(имя, e => {
+  e.preventDefault(); зона.classList.add('наведено');
+}));
+['dragleave', 'drop'].forEach(имя => зона.addEventListener(имя, e => {
+  e.preventDefault(); зона.classList.remove('наведено');
+}));
+зона.addEventListener('drop', e => e.dataTransfer.files[0] && разобрать(e.dataTransfer.files[0]));
+
+загрузитьСостояние();
+</script>
+</body>
+</html>
