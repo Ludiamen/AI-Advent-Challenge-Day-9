@@ -273,6 +273,10 @@ class DocumentAnalysisAgent:
             "compress_threshold": self.compress_threshold,
         }
         if self.memory is not None:
+            # Путь к базе — часть состояния, а не мелочь: сервер, запущенный с
+            # другим HISTORY_DB (или с базой, удалённой у него из-под ног),
+            # честно показывает пустой расход, и понять это можно только так.
+            data["memory"] = self.memory.path
             data["stats"] = self.memory.stats(self.session)
             выжимка = self.memory.latest_summary(self.session)
             data["summary"] = выжимка["content"] if выжимка else ""
